@@ -145,7 +145,7 @@ $tenantId = $accountInfo.tenantId
 # ============================================================================
 Write-SectionHeader "STEP 2: Register Azure AD App"
 
-$appName = Read-Host "Enter a name for the application (e.g., 'SharePoint API Access')"
+$appName = Read-Host "Enter a name for the application (e.g., 'Neologik SharePoint API Access')"
 
 Write-Host "`nCreating app registration..." -ForegroundColor White
 
