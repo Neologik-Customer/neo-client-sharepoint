@@ -31,7 +31,7 @@ Before running the script, ensure you have:
 
 Execute the script with:
 ```powershell
-.\Setup-SharePointAPI.ps1
+.\Setup-SharePointAPIv2.ps1
 ```
 
 ### Step 3: Follow the Interactive Prompts
@@ -39,13 +39,23 @@ Execute the script with:
 The script will guide you through each step:
 
 #### **Azure Authentication**
+- The script will automatically log out any existing Azure session
 - A browser window will open for Azure login
 - Sign in with your Azure AD admin credentials
-- Confirm you want to proceed with the logged-in account
+
+#### **Subscription Selection**
+- The script will display all available Azure subscriptions
+- If you have multiple subscriptions, select the one you want to use
+- If you have only one subscription, it will be automatically selected
 
 #### **App Registration**
 - Enter a name for your application (e.g., "SharePoint API Access")
 - The script will create the app registration automatically
+
+#### **Client Secret Generation**
+- A client secret will be automatically generated
+- **IMPORTANT**: The secret will be displayed in the terminal - copy it immediately
+- The secret value will NOT be shown again and is NOT saved to any file
 
 #### **Admin Consent**
 - A browser window will open for admin consent
