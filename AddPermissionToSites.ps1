@@ -474,6 +474,7 @@ try {
             Write-Host "$($site.Number). " -ForegroundColor Cyan -NoNewline
             Write-Host "$($site.Name)" -ForegroundColor White
             Write-Host "   URL: $($site.WebUrl)" -ForegroundColor Gray
+            Write-Host "   ID:  $($site.SiteId)" -ForegroundColor DarkGray
         }
         
         Write-Host ""

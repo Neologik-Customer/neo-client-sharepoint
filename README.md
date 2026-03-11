@@ -1,139 +1,147 @@
 # neo-client-sharepoint
 
-PowerShell script to create a service principal with scoped access to customer's SharePoint specified sites
+PowerShell script to assign scoped SharePoint site permissions to an Azure Service Principal.
 
 ## Overview
 
-This automated setup script creates and configures an Azure AD App Registration with Microsoft Graph API access for SharePoint using the Sites.Selected permission model. The script handles the complete setup process including authentication, app registration, permissions configuration, and site-specific access grants.
+`AddPermissionToSites.ps1` is an interactive script that grants a Service Principal write access to specific SharePoint sites using the Microsoft Graph API **Sites.Selected** permission model. It can create a new Service Principal or work with an existing one. Elevated permissions (`Sites.FullControl.All`) and the temporary client secret are automatically cleaned up after setup.
 
 ## Prerequisites
 
-Before running the script, ensure you have:
-
-- **Azure CLI**: Download and install from [https://aka.ms/installazurecliwindows](https://aka.ms/installazurecliwindows)
-- **PowerShell 5.1 or later**: Pre-installed on Windows 10/11
-- **Azure AD Admin Access**: You need one of the following roles:
-  - Global Administrator
-  - Privileged Role Administrator
-- **Internet Connection**: Required for Azure authentication and API calls
+- **Azure CLI** — [https://aka.ms/installazurecliwindows](https://aka.ms/installazurecliwindows)
+- **PowerShell 5.1 or later** — pre-installed on Windows 10/11
+- **Azure AD Admin Access** — Global Administrator or Privileged Role Administrator
+- **Internet connection**
 
 ## How to Run
 
-### Step 1: Open PowerShell
-
-1. Press `Win + X` and select "Windows PowerShell" or "Windows Terminal"
-2. Navigate to the script directory:
+1. Open PowerShell and navigate to the script directory:
    ```powershell
-   cd "c:\Users\JashanpreetMagar\Documents\Qualyfi\neo-client-sharepoint"
+   cd "path\to\neo-client-sharepoint"
    ```
 
-### Step 2: Run the Script
+2. Execute the script:
+   ```powershell
+   .\AddPermissionToSites.ps1
+   ```
 
-Execute the script with:
-```powershell
-.\Setup-SharePointAPIv2.ps1
-```
+3. Follow the interactive prompts described below.
 
-### Step 3: Follow the Interactive Prompts
+---
 
-The script will guide you through each step:
+## Script Walkthrough
 
-#### **Azure Authentication**
-- The script will automatically log out any existing Azure session
-- A browser window will open for Azure login
-- Sign in with your Azure AD admin credentials
+### Step 1 — Azure Authentication
 
-#### **Subscription Selection**
-- The script will display all available Azure subscriptions
-- If you have multiple subscriptions, select the one you want to use
-- If you have only one subscription, it will be automatically selected
+The script checks whether you are already logged into Azure CLI and shows the current account and tenant. You can continue with that account or log out and re-authenticate.
 
-#### **App Registration**
-- Enter a name for your application (e.g., "SharePoint API Access")
-- The script will create the app registration automatically
+### Step 2 — Service Principal Setup
 
-#### **Client Secret Generation**
-- A client secret will be automatically generated
-- **IMPORTANT**: The secret will be displayed in the terminal - copy it immediately
-- The secret value will NOT be shown again and is NOT saved to any file
+You are asked whether to **use an existing** Service Principal or **create a new** one.
 
-#### **Admin Consent**
-- A browser window will open for admin consent
-- Review the requested permissions:
-  - Sites.Selected
-  - Sites.FullControl.All (temporarily, removed after setup)
-- Check "Consent on behalf of your organization"
-- Click "Accept"
-- **Note**: You may see an error page saying "No reply address" - this is normal and means consent was successful
+**Using an existing Service Principal:**
+Enter the Client ID (Application ID). The script validates it against Azure AD and retrieves the display name.
 
-#### **SharePoint Site Configuration**
-For each SharePoint site you want to grant access to:
-- Enter the **SharePoint Hostname** (e.g., `contoso.sharepoint.com`)
-- Enter the **Site Name** (e.g., `marketing`)
-  - For URL `https://contoso.sharepoint.com/sites/marketing`, the site name is `marketing`
-- Choose whether to add additional sites
+**Creating a new Service Principal:**
+You choose how to provide the name:
 
-#### **Save Configuration**
-- Optionally save the configuration to a JSON file
-- **Important**: The client secret is NOT saved to the file for security
+| Option | Input | Result |
+|--------|-------|--------|
+| 1 | Resource Group name (e.g. `rg-neo-sec-dev-szn-01`) | Strips `rg-` prefix, removes 2nd-last segment (location), condenses remaining parts → `Neologik SharePoint Access - neosecdev01` |
+| 2 | Short name (e.g. `neosecdev01`) | Prepends standard prefix → `Neologik SharePoint Access - neosecdev01` |
+| 3 | Plain text | Used verbatim as the display name |
 
-## What the Script Does
+The derived name is shown for confirmation before anything is created.
 
-1. **Validates Prerequisites**: Checks for Azure CLI installation
-2. **Azure Authentication**: Logs you into Azure CLI
-3. **Creates App Registration**: Registers a new Azure AD application
-4. **Generates Client Secret**: Creates credentials for the app
-5. **Configures Permissions**: Adds required Microsoft Graph API permissions
-6. **Grants Admin Consent**: Obtains admin consent for the permissions
-7. **Retrieves Site IDs**: Gets the unique ID for each SharePoint site
-8. **Assigns Site Permissions**: Grants read access to specified sites
-9. **Security Cleanup**: Removes Sites.FullControl.All permission, keeping only Sites.Selected
+### Step 3 — Check and Add Required Permissions
 
-## Output
+The script inspects the app's current Microsoft Graph API permissions and adds any that are missing:
 
-After successful completion, you'll receive:
+- `Sites.Selected` — permanent, scoped site access
+- `Sites.FullControl.All` — temporarily required to assign site-level permissions (removed in Step 9)
 
-- **Client ID**: Application (client) ID for your app
-- **Tenant ID**: Your Azure AD tenant ID
-- **Site IDs**: Unique identifiers for configured SharePoint sites
-- **Configuration File**: Optional JSON file with setup details (excludes client secret)
+### Step 4 — Grant Admin Consent
 
-## Important Security Notes
+Admin consent is granted automatically via Azure CLI. If that fails, a browser window opens for manual consent at the Microsoft admin consent URL. The script waits for your confirmation before continuing.
 
-- The client secret is displayed only once during setup - save it securely
-- The script automatically removes elevated permissions (Sites.FullControl.All) after setup
-- Configuration files do NOT contain the client secret
-- Sensitive data is cleared from memory after script completion
+### Step 5 — Create Temporary Client Secret
+
+A short-lived client secret named `test` is created on the app registration. This is used only to obtain an access token in the next step and is deleted at the end of the script.
+
+### Step 6 — Generate Access Token
+
+The script exchanges the client credentials for a Microsoft Graph access token using the OAuth 2.0 client credentials flow.
+
+### Step 7 — List SharePoint Sites
+
+All SharePoint sites in the tenant are retrieved and displayed as a numbered list with their URLs.
+
+### Step 8 — Assign Permissions to Sites
+
+Select sites by number. The script grants `write` access to each selected site via the Graph API. You can add multiple sites one at a time and stop when done.
+
+### Step 9 — Security Cleanup
+
+`Sites.FullControl.All` is revoked:
+1. The active admin-consented role assignment is deleted.
+2. All Graph permissions are removed from the app.
+3. `Sites.Selected` is re-added and re-consented.
+
+The app is left with only the minimum required permission.
+
+### Step 10 — Delete Temporary Client Secret
+
+The `test` client secret created in Step 5 is deleted. The app has no stored credentials after this point.
+
+---
+
+## Summary Output
+
+At the end the script prints:
+
+- Service Principal name and Client ID
+- Number of sites configured and their display names
+
+---
+
+## Security Notes
+
+- The temporary client secret is never displayed to the user and is deleted immediately after use.
+- `Sites.FullControl.All` is automatically removed after site permissions are assigned.
+- Sensitive values (`$clientSecretPlain`, `$accessToken`) are explicitly nulled and garbage-collected on exit.
+
+---
 
 ## Troubleshooting
 
-### Azure CLI Not Found
-- Install Azure CLI from [https://aka.ms/installazurecliwindows](https://aka.ms/installazurecliwindows)
-- Restart PowerShell after installation
-
-### Login Failed
-- Ensure you have admin permissions in Azure AD
-- Try logging out: `az logout` and run the script again
-
-### Site ID Retrieval Failed
-- Verify the site exists at the specified URL
-- Check that the hostname and site name are correct
-- Wait a few minutes for admin consent to propagate
-
-### Permission Assignment Failed
-- Ensure admin consent was granted successfully
-- Verify both permissions show "Granted" status in Azure Portal
-- Wait for permissions to propagate (up to 10 minutes)
+| Problem | Resolution |
+|---------|------------|
+| Azure CLI not found | Install from [https://aka.ms/installazurecliwindows](https://aka.ms/installazurecliwindows) and restart PowerShell |
+| Login failed | Run `az logout`, then re-run the script |
+| Service Principal not found | Verify the Client ID in Azure Portal > App registrations |
+| Admin consent failed | Complete consent manually in the browser window that opens, then confirm when prompted |
+| No sites listed | Permissions may not have propagated yet — wait a few minutes and re-run |
+| Permission assignment failed | Verify admin consent shows "Granted" in Azure Portal and retry |
 
 ## Manual Verification
 
-To verify the setup in Azure Portal:
+### Tenant-level permission (Azure Portal)
+1. Go to **Azure Portal** > **Microsoft Entra ID** > **App registrations**
+2. Find the application by name
+3. **API permissions** — `Sites.Selected` should show status **Granted**
+4. **Certificates & secrets** — the `test` secret should be absent after successful completion
 
-1. Go to **Azure Portal** > **Azure Active Directory** > **App registrations**
-2. Find your application by name
-3. Check **API permissions** - should show Sites.Selected as "Granted"
-4. Check **Certificates & secrets** - should have an active client secret
+### Site-level permission (Graph Explorer)
+Permissions granted via `Sites.Selected` are **not visible in the SharePoint UI** (gear icon > Site permissions or SharePoint Admin Centre). The only way to confirm them is via the Microsoft Graph API:
 
-## Support
+1. Go to [https://developer.microsoft.com/en-us/graph/graph-explorer](https://developer.microsoft.com/en-us/graph/graph-explorer)
+2. Sign in with your admin account
+3. Run the following GET request, replacing `{site-id}` with the site's ID:
+   ```
+   GET https://graph.microsoft.com/v1.0/sites/{site-id}/permissions
+   ```
+4. In the response, locate your app by its `clientId` — the `roles` field should show `["write"]`
+
+---
 
 For issues or questions, contact the Neologik team.
