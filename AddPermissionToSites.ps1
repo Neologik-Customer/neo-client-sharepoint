@@ -145,45 +145,132 @@ catch {
 $tenantId = $accountInfo.tenantId
 
 # ============================================================================
-# STEP 2: Get Service Principal
+# STEP 2: Get or Create Service Principal
 # ============================================================================
-Write-SectionHeader "STEP 2: Service Principal Input"
+Write-SectionHeader "STEP 2: Service Principal Setup"
 
-$servicePrincipalId = Read-Host "Enter the Service Principal Client ID (Application ID)"
+Write-Host "Would you like to:" -ForegroundColor White
+Write-Host "  1. Use an existing Service Principal" -ForegroundColor Cyan
+Write-Host "  2. Create a new Service Principal" -ForegroundColor Cyan
+Write-Host ""
 
-Write-Host "`nValidating Service Principal..." -ForegroundColor White
+do {
+    $spChoice = Read-Host "Enter your choice (1 or 2)"
+} while ($spChoice -ne '1' -and $spChoice -ne '2')
 
-try {
-    $spInfo = az ad sp show --id $servicePrincipalId 2>$null | ConvertFrom-Json
-    if (-not $spInfo) {
-        # Try to get app registration instead
-        $appInfo = az ad app show --id $servicePrincipalId 2>$null | ConvertFrom-Json
-        if ($appInfo) {
-            $clientId = $appInfo.appId
-            $appName = $appInfo.displayName
-            Write-Host "✓ App Registration found: $appName" -ForegroundColor Green
-            Write-Host "  Client ID: $clientId" -ForegroundColor Gray
+if ($spChoice -eq '2') {
+    Write-Host "`nHow would you like to provide the Service Principal name?" -ForegroundColor White
+    Write-Host "  1. Derive from Resource Group name (e.g. rg-neo-abc-dev-uks-01)" -ForegroundColor Cyan
+    Write-Host "  2. Enter a short name (e.g. neosecdev01)  — will be prefixed automatically" -ForegroundColor Cyan
+    Write-Host "  3. Enter the full name as plain text" -ForegroundColor Cyan
+    Write-Host ""
+
+    do {
+        $nameChoice = Read-Host "Enter your choice (1, 2 or 3)"
+    } while ($nameChoice -ne '1' -and $nameChoice -ne '2' -and $nameChoice -ne '3')
+
+    if ($nameChoice -eq '1') {
+        # Derive SP name from Resource Group name
+        $rgName = Read-Host "`nEnter the Resource Group name (e.g. rg-neo-abc-dev-uks-01)"
+
+        # Strip leading 'rg-' prefix
+        $rgStripped = $rgName -replace '^rg-', ''
+
+        # Split into parts and remove the 2nd-last segment (location value)
+        $parts = $rgStripped -split '-'
+        if ($parts.Count -ge 2) {
+            $partsList = [System.Collections.Generic.List[string]]$parts
+            $partsList.RemoveAt($partsList.Count - 2)
+            $condensed = ($partsList | ForEach-Object { $_.ToLower() }) -join ''
         }
         else {
-            Write-Host "✗ Service Principal or App Registration not found" -ForegroundColor Red
-            exit
+            $condensed = $rgStripped.ToLower() -replace '-', ''
         }
+
+        $appName = "Neologik SharePoint Access - $condensed"
+    }
+    elseif ($nameChoice -eq '2') {
+        $shortName = Read-Host "`nEnter the short name (e.g. neosecdev01)"
+        $appName = "Neologik SharePoint Access - $($shortName.Trim())"
     }
     else {
-        $clientId = $spInfo.appId
-        $appName = $spInfo.displayName
-        Write-Host "✓ Service Principal found: $appName" -ForegroundColor Green
-        Write-Host "  Client ID: $clientId" -ForegroundColor Gray
+        $appName = Read-Host "`nEnter the full Service Principal name"
+        $appName = $appName.Trim()
     }
-    
-    # Use Client ID as the application identifier for permissions
-    $appIdentifier = $clientId
+
+    Write-Host "`nService Principal name: " -ForegroundColor White -NoNewline
+    Write-Host $appName -ForegroundColor Cyan
+
+    if (-not (Get-Confirmation "Create Service Principal with this name?")) {
+        Write-Host "Exiting. Please re-run and enter a different name." -ForegroundColor Yellow
+        exit
+    }
+
+    Write-Host "`nCreating App Registration..." -ForegroundColor White
+    try {
+        $newApp = az ad app create --display-name $appName --output json 2>$null | ConvertFrom-Json
+        if (-not $newApp) {
+            Write-Host "✗ Failed to create App Registration" -ForegroundColor Red
+            exit
+        }
+        $clientId = $newApp.appId
+        Write-Host "✓ App Registration created: $appName" -ForegroundColor Green
+        Write-Host "  Client ID: $clientId" -ForegroundColor Gray
+
+        Write-Host "Creating Service Principal..." -ForegroundColor White
+        $newSp = az ad sp create --id $clientId --output json 2>$null | ConvertFrom-Json
+        if (-not $newSp) {
+            Write-Host "✗ Failed to create Service Principal" -ForegroundColor Red
+            exit
+        }
+        Write-Host "✓ Service Principal created" -ForegroundColor Green
+
+        Write-Host "  Waiting for Service Principal to propagate (15 seconds)..." -ForegroundColor Gray
+        Start-Sleep -Seconds 15
+    }
+    catch {
+        Write-Host "✗ Failed to create Service Principal" -ForegroundColor Red
+        Write-Host "Error: $_" -ForegroundColor Red
+        exit
+    }
 }
-catch {
-    Write-Host "✗ Failed to retrieve Service Principal" -ForegroundColor Red
-    Write-Host "Error: $_" -ForegroundColor Red
-    exit
+else {
+    $servicePrincipalId = Read-Host "`nEnter the Service Principal Client ID (Application ID)"
+
+    Write-Host "`nValidating Service Principal..." -ForegroundColor White
+
+    try {
+        $spInfo = az ad sp show --id $servicePrincipalId 2>$null | ConvertFrom-Json
+        if (-not $spInfo) {
+            # Try to get app registration instead
+            $appInfo = az ad app show --id $servicePrincipalId 2>$null | ConvertFrom-Json
+            if ($appInfo) {
+                $clientId = $appInfo.appId
+                $appName = $appInfo.displayName
+                Write-Host "✓ App Registration found: $appName" -ForegroundColor Green
+                Write-Host "  Client ID: $clientId" -ForegroundColor Gray
+            }
+            else {
+                Write-Host "✗ Service Principal or App Registration not found" -ForegroundColor Red
+                exit
+            }
+        }
+        else {
+            $clientId = $spInfo.appId
+            $appName = $spInfo.displayName
+            Write-Host "✓ Service Principal found: $appName" -ForegroundColor Green
+            Write-Host "  Client ID: $clientId" -ForegroundColor Gray
+        }
+    }
+    catch {
+        Write-Host "✗ Failed to retrieve Service Principal" -ForegroundColor Red
+        Write-Host "Error: $_" -ForegroundColor Red
+        exit
+    }
 }
+
+# Use Client ID as the application identifier for permissions
+$appIdentifier = $clientId
 
 # ============================================================================
 # STEP 3: Check and Add Required Permissions
