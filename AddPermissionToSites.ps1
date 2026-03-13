@@ -466,7 +466,7 @@ try {
                 SiteId      = $site.id
             }
         }
-        
+        Write-Host "Site : $($site)"
         Write-Host "`n✓ Found $($availableSites.Count) SharePoint sites:" -ForegroundColor Green
         Write-Host ""
         
@@ -502,49 +502,114 @@ $selectedSites = @()
 $continueSelection = $true
 
 while ($continueSelection) {
-    $siteSelection = Read-Host "`nWhat site do you want to add permission to? (Enter number)"
-    
-    try {
-        $siteNumber = [int]$siteSelection
-        
-        if ($siteNumber -ge 1 -and $siteNumber -le $availableSites.Count) {
-            $selectedSite = $availableSites[$siteNumber - 1]
-            
-            Write-Host "`nAdding permissions to: $($selectedSite.Name)" -ForegroundColor White
-            
-            $permissionUrl = "https://graph.microsoft.com/v1.0/sites/$($selectedSite.SiteId)/permissions"
-            $permissionBody = @{
-                roles = @("write")
-                grantedToIdentities = @(
-                    @{
-                        application = @{
-                            id = $clientId
-                            displayName = $clientId
-                        }
-                    }
-                )
-            } | ConvertTo-Json -Depth 10
-            
-            $permissionResponse = Invoke-GraphApiRequest -Uri $permissionUrl -Method "POST" -Headers $headers -Body $permissionBody
-            
-            if ($permissionResponse) {
-                Write-Host "✓ Permissions granted successfully to: $($selectedSite.Name)" -ForegroundColor Green
-                $selectedSites += $selectedSite
+    Write-Host "`nHow would you like to select a site?" -ForegroundColor White
+    Write-Host "  1. Select by number from the list above" -ForegroundColor Cyan
+    Write-Host "  2. Enter a SharePoint site URL directly" -ForegroundColor Cyan
+    Write-Host ""
+
+    do {
+        $selectionMethod = Read-Host "Enter your choice (1 or 2)"
+    } while ($selectionMethod -ne '1' -and $selectionMethod -ne '2')
+
+    if ($selectionMethod -eq '2') {
+        $siteUrl = Read-Host "`nEnter the SharePoint site URL (e.g. https://contoso.sharepoint.com/sites/MySite)"
+        $siteUrl = $siteUrl.TrimEnd('/')
+
+        # Look up the site via Graph API using its URL
+        $encodedUrl = [Uri]::EscapeDataString($siteUrl)
+        # Try matching against already-retrieved list first
+        $matchedSite = $availableSites | Where-Object { $_.WebUrl.TrimEnd('/') -eq $siteUrl } | Select-Object -First 1
+
+        if (-not $matchedSite) {
+            Write-Host "  Site not in cached list — querying Graph API by path..." -ForegroundColor Gray
+
+            # Parse the URL into hostname and server-relative path
+            # e.g. https://contoso.sharepoint.com/sites/MySite  →  contoso.sharepoint.com  +  /sites/MySite
+            try {
+                $parsedUri    = [System.Uri]$siteUrl
+                $hostname     = $parsedUri.Host         # contoso.sharepoint.com
+                $relativePath = $parsedUri.AbsolutePath # /sites/MySite
             }
-            else {
-                Write-Host "✗ Failed to grant permissions to: $($selectedSite.Name)" -ForegroundColor Red
+            catch {
+                Write-Host "✗ Could not parse the URL: $_" -ForegroundColor Red
+                continue
+            }
+
+            # Graph API path-based site lookup: GET /sites/{hostname}:{server-relative-path}
+            $lookupUri      = "https://graph.microsoft.com/v1.0/sites/${hostname}:${relativePath}"
+            $lookupResponse = Invoke-GraphApiRequest -Uri $lookupUri -Method "GET" -Headers $headers
+
+            if ($lookupResponse -and $lookupResponse.id) {
+                $matchedSite = [PSCustomObject]@{
+                    Number  = 0
+                    Name    = $lookupResponse.displayName
+                    WebUrl  = $lookupResponse.webUrl
+                    SiteId  = $lookupResponse.id
+                }
             }
         }
-        else {
+
+        if (-not $matchedSite) {
+            Write-Host "✗ Could not find a site matching that URL. Please check the URL and try again." -ForegroundColor Red
+            continue
+        }
+
+        Write-Host "`nSite found:" -ForegroundColor Green
+        Write-Host "  Name    = $($matchedSite.Name)" -ForegroundColor White
+        Write-Host "  WebUrl  = $($matchedSite.WebUrl)" -ForegroundColor White
+        Write-Host "  SiteId  = $($matchedSite.SiteId)" -ForegroundColor White
+
+        $selectedSite = $matchedSite
+    }
+    else {
+        $siteSelection = Read-Host "`nWhat site do you want to add permission to? (Enter number)"
+
+        try {
+            $siteNumber = [int]$siteSelection
+        }
+        catch {
+            Write-Host "Invalid input. Please enter a valid number." -ForegroundColor Red
+            continue
+        }
+
+        if ($siteNumber -lt 1 -or $siteNumber -gt $availableSites.Count) {
             Write-Host "Invalid selection. Please enter a number between 1 and $($availableSites.Count)" -ForegroundColor Red
             continue
         }
+
+        $selectedSite = $availableSites[$siteNumber - 1]
+
+        Write-Host "`nSite selected:" -ForegroundColor Green
+        Write-Host "  Name    = $($selectedSite.Name)" -ForegroundColor White
+        Write-Host "  WebUrl  = $($selectedSite.WebUrl)" -ForegroundColor White
+        Write-Host "  SiteId  = $($selectedSite.SiteId)" -ForegroundColor White
     }
-    catch {
-        Write-Host "Invalid input. Please enter a valid number." -ForegroundColor Red
-        continue
+
+    Write-Host "`nAdding permissions to: $($selectedSite.Name)" -ForegroundColor White
+
+    $permissionUrl = "https://graph.microsoft.com/v1.0/sites/$($selectedSite.SiteId)/permissions"
+    $permissionBody = @{
+        roles = @("write")
+        grantedToIdentities = @(
+            @{
+                application = @{
+                    id = $clientId
+                    displayName = $clientId
+                }
+            }
+        )
+    } | ConvertTo-Json -Depth 10
+
+    $permissionResponse = Invoke-GraphApiRequest -Uri $permissionUrl -Method "POST" -Headers $headers -Body $permissionBody
+
+    if ($permissionResponse) {
+        Write-Host "✓ Permissions granted successfully to: $($selectedSite.Name)" -ForegroundColor Green
+        $selectedSites += $selectedSite
     }
-    
+    else {
+        Write-Host "✗ Failed to grant permissions to: $($selectedSite.Name)" -ForegroundColor Red
+    }
+
     if (Get-Confirmation "`nDo you want to add another site?") {
         $continueSelection = $true
     }
