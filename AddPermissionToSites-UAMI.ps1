@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Grants SharePoint site permissions to a User-Assigned Managed Identity (UAMI).
 
