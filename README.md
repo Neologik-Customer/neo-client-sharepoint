@@ -47,8 +47,8 @@ You choose how to provide the name:
 
 | Option | Input | Result |
 |--------|-------|--------|
-| 1 | Resource Group name (e.g. `rg-neo-sec-dev-szn-01`) | Strips `rg-` prefix, removes 2nd-last segment (location), condenses remaining parts → `Neologik SharePoint Access - neosecdev01` |
-| 2 | Short name (e.g. `neosecdev01`) | Prepends standard prefix → `Neologik SharePoint Access - neosecdev01` |
+| 1 | Resource Group name (e.g. `rg-neo-abc-dev-uks-01`) | Strips `rg-` prefix, removes 2nd-last segment (location), condenses remaining parts → `Neologik SharePoint Access - neoabcdev01` |
+| 2 | Short name (e.g. `neoabcdev01`) | Prepends standard prefix → `Neologik SharePoint Access - neoabcdev01` |
 | 3 | Plain text | Used verbatim as the display name |
 
 The derived name is shown for confirmation before anything is created.
