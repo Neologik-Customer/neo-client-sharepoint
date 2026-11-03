@@ -161,7 +161,7 @@ do {
 if ($spChoice -eq '2') {
     Write-Host "`nHow would you like to provide the Service Principal name?" -ForegroundColor White
     Write-Host "  1. Derive from Resource Group name (e.g. rg-neo-abc-dev-uks-01)" -ForegroundColor Cyan
-    Write-Host "  2. Enter a short name (e.g. neosecdev01)  — will be prefixed automatically" -ForegroundColor Cyan
+    Write-Host "  2. Enter a short name (e.g. neoabcdev01)  — will be prefixed automatically" -ForegroundColor Cyan
     Write-Host "  3. Enter the full name as plain text" -ForegroundColor Cyan
     Write-Host ""
 
@@ -190,7 +190,7 @@ if ($spChoice -eq '2') {
         $appName = "Neologik SharePoint Access - $condensed"
     }
     elseif ($nameChoice -eq '2') {
-        $shortName = Read-Host "`nEnter the short name (e.g. neosecdev01)"
+        $shortName = Read-Host "`nEnter the short name (e.g. neoabcdev01)"
         $appName = "Neologik SharePoint Access - $($shortName.Trim())"
     }
     else {
